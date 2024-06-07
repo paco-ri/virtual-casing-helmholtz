@@ -47,8 +47,11 @@ SRC=../src
 
 .PHONY: all clean 
 
-OBJECTS =  test_virtual_casing_sphere.o \
+# OBJECTS =  test_virtual_casing_sphere.o \
+#     $(SRC)/magneto-static-routs.o $(SRC)/surf_routs.o 
+OBJECTS =  test_gradlap.o \
     $(SRC)/magneto-static-routs.o $(SRC)/surf_routs.o 
+
 
 
 #

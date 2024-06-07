@@ -708,7 +708,7 @@ subroutine vtk_curv_plot(n,nda,avals,fname,title)
   character (len=*), intent(in) :: fname,title
 
 
-  integer i,j,k,l,n0,npuv,ipatch,ipt,i1,m,norder,npols,iunit1
+  integer i,j,k,l,n0,ipatch,ipt,i1,m,norder,npols,iunit1
 
   
   iunit1 = 877
@@ -794,7 +794,7 @@ subroutine geom_coefs_interp(npatches,norders,ixyzs,iptype,npts, &
   srccoefs,na,apatches, auv,srcinterp)
 
   implicit real *8 (a-h,o-z)
-  integer nd,npatches,npts
+  integer npatches,npts
   integer norders(npatches),ixyzs(npatches+1),iptype(npatches)
   real *8 srccoefs(9,npts)
   integer na,apatches(na)
