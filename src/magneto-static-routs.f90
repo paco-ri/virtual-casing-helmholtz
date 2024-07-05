@@ -693,8 +693,8 @@
       integer, intent(in) :: ipatch_id(ntarg)
       real *8, intent(in) :: uvs_targ(2,ntarg)
       real *8, intent(in) :: eps
-      real *8, intent(in) :: rho(npts)
-      real *8, intent(out) :: gradrho(3,ntarg)
+      complex *16, intent(in) :: rho(npts)
+      complex *16, intent(out) :: gradrho(3,ntarg)
 
       integer nptso,nnz,nquad
       integer nover,npolso,npols,norder
@@ -811,20 +811,22 @@
            real *8 targs(ndtarg,ntarg) 
            integer nnz,row_ptr(ntarg+1),col_ind(nnz),nquad
            integer iquad(nnz+1)
-           real *8 rho(npts)
+           complex *16 rho(npts)
            real *8 wnear(nquad,3)
 
            integer novers(npatches)
            integer nover,npolso,nptso
            real *8 srcover(12,nptso),whtsover(nptso)
-           real *8 gradrho(3,ntarg)
+           complex *16 gradrho(3,ntarg)
+           real *8 gradrhor(3,ntarg), gradrhoi(3,ntarg)
            real *8, allocatable :: wts(:)
 
            real *8 rhom,rhop,rmum,uf,vf,wtmp
            real *8 u1,u2,u3,u4,w1,w2,w3,w4,w5
 
            real *8, allocatable :: sources(:,:),targtmp(:,:)
-           real *8, allocatable :: charges0(:),sigmaover(:)
+           real *8, allocatable :: charges0r(:),charges0i(:)
+           real *8, allocatable :: sigmaoverr(:),sigmaoveri(:)
            real *8, allocatable :: pot_aux(:)
            real *8, allocatable :: pcurltmp(:,:)
            real *8 dpottmp
@@ -909,7 +911,9 @@
            allocate(charges0(ns))
 
            call oversample_fun_surf(nd,npatches,norders,ixyzs,iptype,& 
-               npts,rho,novers,ixyzso,ns,sigmaover)
+                npts,real(rho),novers,ixyzso,ns,sigmaoverr)
+           call oversample_fun_surf(nd,npatches,norders,ixyzs,iptype,&
+                npts,aimag(rho),novers,ixyzso,ns,sigmaoveri)
 
      !
      !$OMP PARALLEL DO DEFAULT(SHARED) 
@@ -922,10 +926,14 @@
 
      !      print *, "before fmm"
 
-           call lfmm3d_t_c_g(eps,ns,sources,charges0,ntarg,&
-           targtmp,pot_aux,gradrho,ier)
+           call lfmm3d_t_c_g(eps,ns,sources,charges0r,ntarg,&
+                targtmp,pot_aux,gradrhor,ier)
+           call lfmm3d_t_c_g(eps,ns,sources,charges0i,ntarg,&
+                targtmp,pot_aux,gradrhoi,ier)
 
      !      print *, "after fmm"
+
+           
 
      !
      !  Add near quadrature correction
