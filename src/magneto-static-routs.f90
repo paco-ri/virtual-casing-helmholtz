@@ -830,7 +830,7 @@
            real *8, allocatable :: pot_aux(:)
            real *8, allocatable :: pcurltmp(:,:)
            real *8 dpottmp
-           real *8, allocatable :: dgradtmp(:)
+           real *8, allocatable :: dgradtmpr(:),dgradtmpi(:)
            real *8 vtmp1(3),vtmp2(3),vtmp3(3),rncj,errncj
 
            integer ns,nt
@@ -846,7 +846,7 @@
 
            real *8, allocatable :: radsrc(:)
            real *8, allocatable :: srctmp2(:,:)
-           real *8, allocatable :: ctmp0(:)
+           real *8, allocatable :: ctmp0r(:), ctmp0i(:)
            real *8 thresh,ra,erra
            real *8 rr,rmin
            real *8 over4pi
@@ -918,7 +918,8 @@
      !
      !$OMP PARALLEL DO DEFAULT(SHARED) 
            do i=1,ns
-             charges0(i) = sigmaover(i)*whtsover(i)*over4pi
+             charges0r(i) = sigmaoverr(i)*whtsover(i)*over4pi
+             charges0i(i) = sigmaoveri(i)*whtsover(i)*over4pi
            enddo
      !$OMP END PARALLEL DO      
 
@@ -974,7 +975,7 @@
            allocate(dgradtmp(3))
            allocate(ctmp0(nmax),srctmp2(3,nmax))
      !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,srctmp2) &
-     !$OMP PRIVATE(ctmp0,l,jstart,nss,dpottmp,dgradtmp)
+     !$OMP PRIVATE(ctmp0r,ctmp0i,l,jstart,nss,dpottmp,dgradtmpr,dgradtmpi,m)
            do i=1,ntarg
              nss = 0
              do j=row_ptr(i),row_ptr(i+1)-1
@@ -985,16 +986,22 @@
                  srctmp2(2,nss) = srcover(2,l)
                  srctmp2(3,nss) = srcover(3,l)
 
-                 ctmp0(nss)=charges0(l)
+                 ctmp0r(nss)=charges0r(l)
+                 ctmp0i(nss)=charges0i(l)
                enddo
              enddo
 
              dpottmp = 0
-             dgradtmp = 0
+             dgradtmpr = 0
+             dgradtmpi = 0
 
-             call l3ddirectcg(1,srctmp2,ctmp0,nss,targtmp(1,i), &
-               ntarg0,dpottmp,dgradtmp,thresh)
-             gradrho(1:3,i) = gradrho(1:3,i) - dgradtmp(1:3)
+             call l3ddirectcg(1,srctmp2,ctmp0r,nss,targtmp(1,i), &
+                  ntarg0,dpottmp,dgradtmpr,thresh)
+             call l3ddirectcg(1,srctmp2,ctmp0i,nss,targtmp(1,i), &
+                  ntarg0,dpottmp,dgradtmpi,thresh)
+             do m=1,3
+                gradrho(m,i) = gradrho(m,i) - dgradtmpr(m) - ima*dgradtmpi(m)
+             enddo
            enddo
      !$OMP END PARALLEL DO      
 
@@ -1025,8 +1032,8 @@
       integer, intent(in) :: ipatch_id(ntarg)
       real *8, intent(in) :: uvs_targ(2,ntarg)
       real *8, intent(in) :: eps
-      real *8, intent(in) :: rjvec(3,npts)
-      real *8, intent(out) :: curlj(3,ntarg)
+      complex *16, intent(in) :: rjvec(3,npts)
+      complex *16, intent(out) :: curlj(3,ntarg)
 
       integer nptso,nnz,nquad
       integer nover,npolso,npols,norder
@@ -1142,23 +1149,25 @@
       real *8 targs(ndtarg,ntarg) 
       integer nnz,row_ptr(ntarg+1),col_ind(nnz),nquad
       integer iquad(nnz+1)
-      real *8 rjvec(3,npts)
+      complex *16 rjvec(3,npts)
       real *8 wnear(nquad,3)
 
       integer novers(npatches)
       integer nover,npolso,nptso
       real *8 srcover(12,nptso),whtsover(nptso)
-      real *8 curlj(3,ntarg)
+      complex *16 curlj(3,ntarg)
       real *8, allocatable :: wts(:)
 
       real *8 rhom,rhop,rmum,uf,vf,wtmp
       real *8 u1,u2,u3,u4,w1,w2,w3,w4,w5
 
       real *8, allocatable :: sources(:,:),targtmp(:,:)
-      real *8, allocatable :: charges0(:,:),sigmaover(:,:)
-      real *8, allocatable :: pot_aux(:,:),grad_aux(:,:,:)
+      real *8, allocatable :: charges0r(:,:),charges0i(:,:)
+      real *8, allocatable :: sigmaoverr(:,:),sigmaoveri(:,:)
+      real *8, allocatable :: pot_aux(:,:)
+      real *8, allocatable :: grad_auxr(:,:,:), grad_auxi(:,:,:)
       real *8, allocatable :: pcurltmp(:,:)
-      real *8, allocatable :: dpottmp(:),dgradtmp(:,:)
+      real *8, allocatable :: dpottmp(:),dgradtmpr(:,:),dgradtmpi(:,:)
       real *8 vtmp1(3),vtmp2(3),vtmp3(3),rncj,errncj
 
       integer ns,nt
@@ -1174,7 +1183,7 @@
 
       real *8, allocatable :: radsrc(:)
       real *8, allocatable :: srctmp2(:,:)
-      real *8, allocatable :: ctmp0(:,:)
+      real *8, allocatable :: ctmp0r(:,:),ctmp0i(:,:)
       real *8 thresh,ra,erra
       real *8 rr,rmin
       real *8 over4pi
@@ -1239,12 +1248,15 @@
       allocate(charges0(nd,ns))
 
       call oversample_fun_surf(nd,npatches,norders,ixyzs,iptype,& 
-          npts,rjvec,novers,ixyzso,ns,sigmaover)
+           npts,real(rjvec),novers,ixyzso,ns,sigmaoverr)
+      call oversample_fun_surf(nd,npatches,norders,ixyzs,iptype,& 
+           npts,aimag(rjvec),novers,ixyzso,ns,sigmaoveri)
         
 !
 !$OMP PARALLEL DO DEFAULT(SHARED) 
       do i=1,ns
-        charges0(1:3,i) = sigmaover(1:3,i)*whtsover(i)*over4pi
+         charges0r(1:3,i) = sigmaoverr(1:3,i)*whtsover(i)*over4pi
+         charges0i(1:3,i) = sigmaoveri(1:3,i)*whtsover(i)*over4pi
       enddo
 !$OMP END PARALLEL DO      
 
@@ -1252,14 +1264,19 @@
 
 !      print *, "before fmm"
 
-      call lfmm3d_t_c_g_vec(nd,eps,ns,sources,charges0,ntarg,targtmp, &
-        pot_aux,grad_aux,ier)
+      call lfmm3d_t_c_g_vec(nd,eps,ns,sources,charges0r,ntarg,targtmp, &
+           pot_aux,grad_auxr,ier)
+      call lfmm3d_t_c_g_vec(nd,eps,ns,sources,charges0i,ntarg,targtmp, &
+           pot_aux,grad_auxi,ier)
 
 !$OMP PARALLEL DO DEFAULT(SHARED)         
       do i=1,ntarg
-        curlj(1,i) = grad_aux(3,2,i) - grad_aux(2,3,i)
-        curlj(2,i) = grad_aux(1,3,i) - grad_aux(3,1,i) 
-        curlj(3,i) = grad_aux(2,1,i) - grad_aux(1,2,i)
+         curlj(1,i) = grad_auxr(3,2,i) - grad_auxr(2,3,i) &
+              + ima*(grad_auxi(3,2,i) - grad_auxi(2,3,i))
+         curlj(2,i) = grad_auxr(1,3,i) - grad_auxr(3,1,i) &
+              + ima*(grad_auxi(1,3,i) - grad_auxi(3,1,i))
+         curlj(3,i) = grad_auxr(2,1,i) - grad_auxr(1,2,i) &
+              + ima*(grad_auxi(2,1,i) - grad_auxi(1,2,i))
       enddo
 !$OMP END PARALLEL DO      
 
@@ -1307,7 +1324,7 @@
       allocate(dpottmp(nd),dgradtmp(nd,3))
       allocate(ctmp0(nd,nmax),srctmp2(3,nmax))
 !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,srctmp2) &
-!$OMP PRIVATE(ctmp0,l,jstart,nss,dpottmp,dgradtmp)
+!$OMP PRIVATE(ctmp0r,ctmp0i,l,jstart,nss,dpottmp,dgradtmp)
       do i=1,ntarg
         nss = 0
         do j=row_ptr(i),row_ptr(i+1)-1
@@ -1318,15 +1335,19 @@
             srctmp2(2,nss) = srcover(2,l)
             srctmp2(3,nss) = srcover(3,l)
 
-            ctmp0(1:3,nss)=charges0(1:3,l)
+            ctmp0r(1:3,nss)=charges0r(1:3,l)
+            ctmp0i(1:3,nss)=charges0i(1,3,l)
           enddo
         enddo
 
         dpottmp = 0
-        dgradtmp = 0
+        dgradtmpr = 0
+        dgradtmpi = 0
 
-        call l3ddirectcg(nd,srctmp2,ctmp0,nss,targtmp(1,i), &
-          ntarg0,dpottmp,dgradtmp,thresh)
+        call l3ddirectcg(nd,srctmp2,ctmp0r,nss,targtmp(1,i), &
+             ntarg0,dpottmp,dgradtmpr,thresh)
+        call l3ddirectcg(nd,srctmp2,ctmp0i,nss,targtmp(1,i), &
+             ntarg0,dpottmp,dgradtmpi,thresh)
         curlj(1,i) = curlj(1,i) - (dgradtmp(3,2)-dgradtmp(2,3))
         curlj(2,i) = curlj(2,i) - (dgradtmp(1,3)-dgradtmp(3,1))
         curlj(3,i) = curlj(3,i) - (dgradtmp(2,1)-dgradtmp(1,2))
