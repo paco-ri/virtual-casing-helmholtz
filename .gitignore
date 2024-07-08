@@ -1,9 +1,12 @@
+*
+!*.*
 *~
 bin
 lib
 obj
 *.swp
 *.o
+*.a
 fort.*
 int2*
 .idea/*
