@@ -81,3 +81,7 @@ install:
 	gfortran -shared -fPIC -O3 -march=native -funroll-loops -std=legacy -w -fopenmp -J .mod/ -Wl,--whole-archive lib-static/libvirtualcasing.a -Wl,--no-whole-archive -o libvirtualcasing.so -lm -lstdc++ -lgomp -lblas -llapack
 	mv libvirtualcasing.so lib/
 
+test_gradcurllap:
+	gfortran -o test/test_gradcurllap test/test_gradcurllap.f90 lib-static/libvirtualcasing.a -fallow-argument-mismatch -fPIC -O3 -march=native -funroll-loops -std=legacy -w -fopenmp -lm -lstdc++ -lgomp -lblas -llapack
+	test/test_gradcurllap
+

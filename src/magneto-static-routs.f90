@@ -774,10 +774,10 @@
         iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targs,ipatch_id, &
         uvs_targ,eps,iquadtype,nnz,row_ptr,col_ind,iquad,rfac0,nquad, &
         wnear)
-!
+
 !
 !  compute layer potential
-!
+! 
       call lpcomp_gradlap_addsub(npatches,norders,ixyzs,&
         iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targs, &
         eps,nnz,row_ptr,col_ind,iquad,nquad,wnear,rho, &
@@ -929,6 +929,7 @@
 
            call lfmm3d_t_c_g(eps,ns,sources,charges0r,ntarg,&
                 targtmp,pot_aux,gradrhor,ier)
+
            call lfmm3d_t_c_g(eps,ns,sources,charges0i,ntarg,&
                 targtmp,pot_aux,gradrhoi,ier)
 

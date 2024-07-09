@@ -23,13 +23,14 @@ real *8, allocatable :: ynm(:),unm(:,:),xnm(:,:)
 complex *16, allocatable :: zynm(:)
 
 real *8, allocatable :: cms(:,:),rads(:),rad_near(:)
-real *8, allocatable :: rjvec(:,:),rho(:)
-real *8, allocatable :: curlj(:,:),gradrho(:,:)
+complex *16, allocatable :: rjvec(:,:),rho(:)
+complex *16, allocatable :: curlj(:,:),gradrho(:,:)
 real *8, allocatable :: curlj_targ(:,:),gradrho_targ(:,:)
 
 real *8, allocatable :: wnear(:)
 real *8, allocatable :: w(:,:)
-real *8 vtmp1(3),vtmp2(3)
+complex *16 vtmp1(3),vtmp2(3)
+complex *16 errnc,wtmp
 real *8 xyz_out(3),xyz_in(3)
 complex *16 zpars
 
@@ -73,7 +74,7 @@ enddo
 call prin2('surface area of sphere=*',ra,1)
 
 nn = 3
-mm = 2
+mm = 0!2
 nmax = nn
 allocate(w(0:nmax,0:nmax))
 allocate(zynm(npts),ynm(npts),unm(3,npts),xnm(3,npts))
@@ -139,14 +140,10 @@ rnd = 0
 runc = (nn+1.0d0)/(2*nn+1.0d0)*rcu
 rxnc = (nn+0.0d0)/(2*nn+1.0d0)*rcx
 
-call prin2('runc=*',runc,1)
-call prin2('rxnc=*',rxnc,1)
-call prin2('rcu=*',rcu,1)
-call prin2('rcx=*',rcx,1)
 rund = 0
 rxnd = -sqrt((nn+0.0d0)*(nn+1.0d0))/(2*nn+1.0d0)*rcx
 do i=1,npts
-  call cross_prod3d(srcvals(10,i),curlj(1,i),vtmp1)
+  call dzcross_prod3d(srcvals(10,i),curlj(1,i),vtmp1)
   vtmp1(1:3) = vtmp1(1:3) + rjvec(1:3,i)/2
 
   vtmp2(1) = runc*unm(1,i) + rxnc*xnm(1,i) 
@@ -159,7 +156,7 @@ do i=1,npts
   errnc = errnc + (vtmp1(2)-vtmp2(2))**2*wts(i)
   errnc = errnc + (vtmp1(3)-vtmp2(3))**2*wts(i)
   wtmp = 0
-  call dot_prod3d(srcvals(10,i),curlj(1,i),wtmp)
+  call dzdot_prod3d(srcvals(10,i),curlj(1,i),wtmp)
 
   rnd = rnd + ynm(i)**2*wts(i)
   errnd = errnd + (wtmp - rxnd*ynm(i))**2*wts(i)
@@ -188,23 +185,26 @@ rnc = 0
 rnd = 0
 
 do i=1,npts
-    call cross_prod3d(srcvals(10,i),gradrho(1,i),vtmp1)
+    call dzcross_prod3d(srcvals(10,i),gradrho(1,i),vtmp1)
     vtmp2(1:3) = rxnc*xnm(1:3,i)
     rnc = rnc + (vtmp2(1)**2+vtmp2(2)**2+vtmp2(3)**2)*wts(i)
-    errnc = errnc + (vtmp2(1)-vtmp1(1))**2*wts(i)
-    errnc = errnc + (vtmp2(2)-vtmp1(2))**2*wts(i)
-    errnc = errnc + (vtmp2(3)-vtmp1(3))**2*wts(i)
+    errnc = errnc + ((real(vtmp2(1))-real(vtmp1(1)))**2 &
+         + (aimag(vtmp2(1))-aimag(vtmp1(1)))**2)*wts(i)
+    errnc = errnc + ((real(vtmp2(2))-real(vtmp1(2)))**2 &
+         + (aimag(vtmp2(2))-aimag(vtmp1(2)))**2)*wts(i)
+    errnc = errnc + ((real(vtmp2(3))-real(vtmp1(3)))**2 &
+         + (aimag(vtmp2(3))-aimag(vtmp1(3)))**2)*wts(i)
 
     wtmp = 0
-    call dot_prod3d(srcvals(10,i),gradrho(1,i),wtmp)
+    call dzdot_prod3d(srcvals(10,i),gradrho(1,i),wtmp)
     wtmp = wtmp - rho(i)/2
-    errnd = errnd + (wtmp-rynd*ynm(i))**2*wts(i)
+    errnd = errnd + ((real(wtmp)-rynd*ynm(i))**2 + aimag(wtmp)**2)*wts(i)
     rnd = rnd + ynm(i)**2*wts(i)
 enddo
 
 errnc = sqrt(errnc/rnc)
 errnd = sqrt(errnd/rnd)
-call prin2('error in n times grad s0 = *',errnc,1)
+! call prin2('error in n times grad s0 = *',errnc,1)
 call prin2('error in n dot grad s0 =*',errnd,1)
 
 return
