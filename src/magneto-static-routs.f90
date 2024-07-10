@@ -929,13 +929,10 @@
 
            call lfmm3d_t_c_g(eps,ns,sources,charges0r,ntarg,&
                 targtmp,pot_aux,gradrhor,ier)
-
            call lfmm3d_t_c_g(eps,ns,sources,charges0i,ntarg,&
                 targtmp,pot_aux,gradrhoi,ier)
 
      !      print *, "after fmm"
-
-           
 
      !
      !  Add near quadrature correction
@@ -944,6 +941,9 @@
      !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,jquadstart) &
      !$OMP PRIVATE(jstart,npols,l,w1,w2,w3)
            do i=1,ntarg
+             gradrho(1,i) = gradrhor(1,i) + ima*gradrhoi(1,i)
+             gradrho(2,i) = gradrhor(2,i) + ima*gradrhoi(2,i)
+             gradrho(3,i) = gradrhor(3,i) + ima*gradrhoi(3,i)
              do j=row_ptr(i),row_ptr(i+1)-1
                jpatch = col_ind(j)
                npols = ixyzs(jpatch+1)-ixyzs(jpatch)

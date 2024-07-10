@@ -17,10 +17,10 @@ real *8, allocatable :: uvs_targ(:,:)
 
 real *8, allocatable :: hvec(:,:)
 real *8, allocatable :: rhs(:)
-real *8, allocatable :: hvecdiv(:)
+real *8, allocatable :: hvecdivr(:),hvecdivi(:)
 
-real *8, allocatable :: ynm(:),unm(:,:),xnm(:,:)
-complex *16, allocatable :: zynm(:)
+real *8, allocatable :: ynm(:),unmr(:,:),unmi(:,:)
+complex *16, allocatable :: zynm(:),unm(:,:),xnm(:,:)
 
 real *8, allocatable :: cms(:,:),rads(:),rad_near(:)
 complex *16, allocatable :: rjvec(:,:),rho(:)
@@ -34,6 +34,9 @@ complex *16 errnc,wtmp
 real *8 xyz_out(3),xyz_in(3)
 complex *16 zpars
 
+complex *16 ima
+
+data ima/(0.0d0,1.0d0)/
 
 call prini(6,13)
 
@@ -45,7 +48,7 @@ igeomtype = 1
 ipars(1) = 2
 
 npatches = 12*(4**ipars(1)) 
-norder = 7 
+norder = 8!7 
 npols = (norder+1)*(norder+2)/2
 npts = npatches*npols
 allocate(srcvals(12,npts),srccoefs(9,npts))
@@ -74,34 +77,40 @@ enddo
 call prin2('surface area of sphere=*',ra,1)
 
 nn = 3
-mm = 0!2
+mm = 2
 nmax = nn
 allocate(w(0:nmax,0:nmax))
-allocate(zynm(npts),ynm(npts),unm(3,npts),xnm(3,npts))
+allocate(ynm(npts))
+allocate(zynm(npts),unm(3,npts),xnm(3,npts))
 call l3getsph(nmax,mm,nn,12,srcvals,zynm,npts,w)
 ! zynm <-- Y_<nn>^<mm>(each point)
 ! w <-- Y_n^m(last point) 
 
-do i=1,npts
-  ynm(i) = real(zynm(i))
-enddo
+! do i=1,npts
+!   ynm(i) = real(zynm(i))
+! enddo
 
-
+allocate(unmr(3,npts),unmi(3,npts))
 call surf_grad(npatches,norders,ixyzs,iptype,npts,srccoefs, &
-     srcvals,ynm,unm)
+     srcvals,real(zynm),unmr)
+call surf_grad(npatches,norders,ixyzs,iptype,npts,srccoefs, &
+     srcvals,aimag(zynm),unmi)
 
 do i=1,npts
+  unm(1:3,i) = unmr(1:3,i) + ima*unmi(1:3,i)
   unm(1:3,i) = unm(1:3,i)/sqrt(nn*(nn+1.0d0))
-  call cross_prod3d(srcvals(10,i),unm(1,i),xnm(1,i))
+  call dzcross_prod3d(srcvals(10,i),unm(1,i),xnm(1,i))
 enddo
-allocate(hvecdiv(npts))
 
+allocate(hvecdivr(npts),hvecdivi(npts))
 call surf_div(npatches,norders,ixyzs,iptype,npts,srccoefs, &
-     srcvals,xnm,hvecdiv)
+     srcvals,real(xnm),hvecdivr)
+call surf_div(npatches,norders,ixyzs,iptype,npts,srccoefs, &
+     srcvals,aimag(xnm),hvecdivi)
 
 ra = 0
 do i=1,npts
-  ra = ra + hvecdiv(i)**2*wts(i)
+  ra = ra + (hvecdivr(i)**2+hvecdivi(i)**2)*wts(i)
 enddo
 ra = sqrt(ra)
 call prin2('error in surface divergence of xnm=*',ra,1)
@@ -112,10 +121,10 @@ rcu = 1.1d0
 rcx = 0.0d0
 do i=1,npts
   rjvec(1:3,i) = rcu*unm(1:3,i) + rcx*xnm(1:3,i)
-  rho(i) = ynm(i)
+  rho(i) = zynm(i)
 enddo
 
-eps = 1.0d-5
+eps = 1.0d-9
 
 allocate(ipatch_id(npts),uvs_src(2,npts))
 
@@ -150,18 +159,20 @@ do i=1,npts
   vtmp2(2) = runc*unm(2,i) + rxnc*xnm(2,i) 
   vtmp2(3) = runc*unm(3,i) + rxnc*xnm(3,i) 
 
-
-  rnc = rnc + (vtmp2(1)**2 + vtmp2(2)**2 + vtmp2(3)**2)*wts(i)
-  errnc = errnc + (vtmp1(1)-vtmp2(1))**2*wts(i)
-  errnc = errnc + (vtmp1(2)-vtmp2(2))**2*wts(i)
-  errnc = errnc + (vtmp1(3)-vtmp2(3))**2*wts(i)
+  rnc = rnc + abs(vtmp2(1))**2*wts(i)
+  rnc = rnc + abs(vtmp2(2))**2*wts(i)
+  rnc = rnc + abs(vtmp2(3))**2*wts(i)
+  
+  errnc = errnc + abs(vtmp1(1)-vtmp2(1))**2*wts(i)
+  errnc = errnc + abs(vtmp1(2)-vtmp2(2))**2*wts(i)
+  errnc = errnc + abs(vtmp1(3)-vtmp2(3))**2*wts(i)
+  
   wtmp = 0
   call dzdot_prod3d(srcvals(10,i),curlj(1,i),wtmp)
 
-  rnd = rnd + ynm(i)**2*wts(i)
-  errnd = errnd + (wtmp - rxnd*ynm(i))**2*wts(i)
-  if(i.lt.3) print *, vtmp1(1),vtmp2(1),vtmp1(1)/vtmp2(1)
-  if(i.lt.3) print *, wtmp,rxnd*ynm(i),rxnd*ynm(i)/wtmp
+  rnd = rnd + (real(zynm(i))**2+aimag(zynm(i))**2)*wts(i)
+  errnd = errnd + ((real(wtmp) - rxnd*real(zynm(i)))**2 + &
+       (aimag(wtmp) - rxnd*aimag(zynm(i)))**2)*wts(i)
 enddo
 
 errnd = sqrt(errnd/rnd)
@@ -185,26 +196,32 @@ rnc = 0
 rnd = 0
 
 do i=1,npts
+    vtmp1 = 0
+    vtmp2 = 0
     call dzcross_prod3d(srcvals(10,i),gradrho(1,i),vtmp1)
     vtmp2(1:3) = rxnc*xnm(1:3,i)
-    rnc = rnc + (vtmp2(1)**2+vtmp2(2)**2+vtmp2(3)**2)*wts(i)
-    errnc = errnc + ((real(vtmp2(1))-real(vtmp1(1)))**2 &
-         + (aimag(vtmp2(1))-aimag(vtmp1(1)))**2)*wts(i)
-    errnc = errnc + ((real(vtmp2(2))-real(vtmp1(2)))**2 &
-         + (aimag(vtmp2(2))-aimag(vtmp1(2)))**2)*wts(i)
-    errnc = errnc + ((real(vtmp2(3))-real(vtmp1(3)))**2 &
-         + (aimag(vtmp2(3))-aimag(vtmp1(3)))**2)*wts(i)
+    rnc = rnc + abs(vtmp2(1))**2*wts(i)
+    rnc = rnc + abs(vtmp2(2))**2*wts(i)
+    rnc = rnc + abs(vtmp2(3))**2*wts(i)
+    ! rnc = rnc + (vtmp2(1)**2 + vtmp2(2)**2 + vtmp2(3)**2)*wts(i)
+    errnc = errnc + aimag(vtmp1(1)-vtmp2(1))**2*wts(i)
+    errnc = errnc + aimag(vtmp1(2)-vtmp2(2))**2*wts(i)
+    errnc = errnc + aimag(vtmp1(3)-vtmp2(3))**2*wts(i)
 
     wtmp = 0
     call dzdot_prod3d(srcvals(10,i),gradrho(1,i),wtmp)
     wtmp = wtmp - rho(i)/2
-    errnd = errnd + ((real(wtmp)-rynd*ynm(i))**2 + aimag(wtmp)**2)*wts(i)
-    rnd = rnd + ynm(i)**2*wts(i)
+    errnd = errnd + ((real(wtmp)-rynd*real(zynm(i)))**2 &
+         + (aimag(wtmp)-rynd*aimag(zynm(i)))**2)*wts(i)
+    rnd = rnd + (real(zynm(i))**2+aimag(zynm(i))**2)*wts(i)
+    ! if(i.lt.20) print *, rho(i)
+    ! print *,abs(vtmp1(1))**2+abs(vtmp1(2))**2+abs(vtmp1(3))**2,abs(vtmp2(1))**2+abs(vtmp2(2))**2+abs(vtmp2(3))**2
+    !print *,errnc/rnc
 enddo
 
 errnc = sqrt(errnc/rnc)
 errnd = sqrt(errnd/rnd)
-! call prin2('error in n times grad s0 = *',errnc,1)
+call prin2('error in n times grad s0 = *',errnc,1)
 call prin2('error in n dot grad s0 =*',errnd,1)
 
 return
