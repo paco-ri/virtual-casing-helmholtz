@@ -164,7 +164,7 @@ rxnc = -ima*jnk(nn)*hnkp(nn)*rcx
 
 do i=1,npts
    call dzcross_prod3d(srcvals(10,i),curlj(1,i),vtmp1)
-   vtmp1(1:3) = vtmp1(1:3) ! + rjvec(1:3,i)/2
+   vtmp1(1:3) = vtmp1(1:3) + rjvec(1:3,i)/2
 
    vtmp2(1) = runc*unm(1,i) + rxnc*xnm(1,i) 
    vtmp2(2) = runc*unm(2,i) + rxnc*xnm(2,i) 
@@ -182,7 +182,7 @@ enddo
 
 errnc = sqrt(errnc/rnc)
 call prin2('rnc=*',rnc,1)
-call prin2('error in n times curl s0 = *',errnc,1)
+call prin2('error in n times curl sk = *',errnc,1)
 
 return
 end

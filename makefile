@@ -77,11 +77,15 @@ FMMBIE_INSTALL = ${HOME}/lib/libfmm3dbie.a
 
 install:
 	cd lib && rm -rf *
-	cd lib-static && rm -rf * && ar -x $(FMMBIE_INSTALL) && cp ../src/magneto-static-routs.o . && cp ../src/surf_routs.o surf_routs2.o && ar rcs libvirtualcasing.a *.o && rm -f *.o
+	cd lib-static && rm -rf * && ar -x $(FMMBIE_INSTALL) && cp ../src/magneto-static-routs.o . && cp ../src/magneto-dynamic-routs.o . && cp ../src/surf_routs.o surf_routs2.o && ar rcs libvirtualcasing.a *.o && rm -f *.o
 	gfortran -shared -fPIC -O3 -march=native -funroll-loops -std=legacy -w -fopenmp -J .mod/ -Wl,--whole-archive lib-static/libvirtualcasing.a -Wl,--no-whole-archive -o libvirtualcasing.so -lm -lstdc++ -lgomp -lblas -llapack
 	mv libvirtualcasing.so lib/
 
 test_gradcurllap:
 	gfortran -o test/test_gradcurllap test/test_gradcurllap.f90 lib-static/libvirtualcasing.a -fallow-argument-mismatch -fPIC -O3 -march=native -funroll-loops -std=legacy -w -fopenmp -lm -lstdc++ -lgomp -lblas -llapack
 	test/test_gradcurllap
+
+test_gradcurlhelm:
+	gfortran -o test/test_gradcurlhelm test/test_gradcurlhelm.f90 lib-static/libvirtualcasing.a -fallow-argument-mismatch -fPIC -O3 -march=native -funroll-loops -std=legacy -w -fopenmp -lm -lstdc++ -lgomp -lblas -llapack
+	test/test_gradcurlhelm
 
