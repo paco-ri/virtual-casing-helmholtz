@@ -125,11 +125,7 @@ do i=1,npts
 enddo
 
 eps = 1.0d-9
-
 allocate(ipatch_id(npts),uvs_src(2,npts))
-
-
-
 call get_patch_id_uvs(npatches,norders,ixyzs,iptype,npts, &
      ipatch_id,uvs_src)
 

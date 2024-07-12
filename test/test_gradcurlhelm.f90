@@ -32,12 +32,16 @@ complex *16, allocatable :: rjvec(:,:),rho(:)
 complex *16, allocatable :: curlj(:,:),gradrho(:,:)
 complex *16, allocatable :: curlj_targ(:,:),gradrho_targ(:,:)
 complex *16 zk
-complex *16, allocatable :: hnk(:),hnkp(:),jnk(:),jnkp(:)
-real *8 dk
+complex *16, allocatable :: hnk(:),hnkp(:)
+real *8, allocatable ::jnk(:),jnkp(:)
+complex *16, allocatable :: rhnk(:),rhnkp(:),rjnk(:),rjnkp(:)
+integer mn
+
+complex *16 runc, rxnc, rund, rxnd, rynd
 
 real *8, allocatable :: wnear(:)
 real *8, allocatable :: w(:,:)
-complex *16 vtmp1(3),vtmp2(3)
+complex *16 vtmp1(3),vtmp2(3),wtmp
 real *8 xyz_out(3),xyz_in(3)
 complex *16 zpars
 complex *16 ima
@@ -53,7 +57,7 @@ pi = atan(done)*4
 igeomtype = 1
 ipars(1) = 2
 npatches = 12*(4**ipars(1)) 
-norder = 4 ! 7 
+norder = 6!7 
 npols = (norder+1)*(norder+2)/2
 npts = npatches*npols
 allocate(srcvals(12,npts),srccoefs(9,npts))
@@ -122,23 +126,23 @@ call prin2('error in surface divergence of xnm=*',ra,1)
 
 ! create sources
 allocate(rjvec(3,npts),rho(npts),curlj(3,npts),gradrho(3,npts))
-rcu = 1.1d0
-rcx = 0.0d0
+rcu = 0.0d0 ! 1.1d0
+rcx = 1.0d0 ! 0.0d0
 do i=1,npts
    ! check this!!!
    rjvec(1:3,i) = rcu*unm(1:3,i) + rcx*xnm(1:3,i)
    rho(i) = ynm(i)
 enddo
 
-eps = 1.0d-5
+eps = 1.0d-8
 allocate(ipatch_id(npts),uvs_src(2,npts))
 call get_patch_id_uvs(npatches,norders,ixyzs,iptype,npts, &
      ipatch_id,uvs_src)
 
 ! compute layer potentials
-dk = 7.8d0
-zk = 7.8d0
-print *,'zk',zk
+zk = 1.0d0
+dk = real(zk)
+call prin2('zk = *', zk, 2)
 call lpcomp_gradhelm(npatches,norders,ixyzs,&
      iptype,npts,srccoefs,srcvals,12,npts,srcvals,ipatch_id,uvs_src,&
      eps,zk,rho,gradrho)
@@ -146,21 +150,36 @@ call lpcomp_curlhelm(npatches,norders,ixyzs,&
      iptype,npts,srccoefs,srcvals,12,npts,srcvals,ipatch_id,uvs_src,&
      eps,zk,rjvec,curlj)
 
+! special function evaluations
+allocate(jnk(0:nn),jnkp(0:nn),hnk(0:nn),hnkp(0:nn))
+call SPHJ(nn,dk,mn,jnk,jnkp)
+call SPHH(nn,dk,mn,hnk,hnkp)
+
+allocate(rjnk(nn),rjnkp(nn),rhnk(0:nn),rhnkp(0:nn))
+call riccati_jp(nn,dk,rjnk,rjnkp)
+call riccati_hp(nn,dk,rhnk,rhnkp)
+
 ! test layer potential computation
 errnc = 0
 errnd = 0
 rnc = 0
 rnd = 0
 
-! coefficients, eq. (54)
+! curl Sk tests
+
+! coefficients, eq. (54), third line
 ! see fmm3dbie/src/maxwell/analytic_sphere_pw_pec:riccati_jp(), etc.
-allocate(jnk(nn),jnkp(nn),hnk(nn+1),hnkp(nn+1))
-call riccati_jp(nn,dk,jnk,jnkp)
-call riccati_hp(nn,dk,hnk,hnkp)
-print *,jnk
-print *,hnk
-runc = ima*jnkp(nn)*hnk(nn)*rcu
-rxnc = -ima*jnk(nn)*hnkp(nn)*rcx
+runc = ima*rjnkp(nn)*rhnk(nn)*rcu
+rxnc = -ima*rjnk(nn)*rhnkp(nn)*rcx
+
+! eqn. (62) 
+rund = 0
+rxnd = -ima*rjnk(nn)*rhnk(nn)*sqrt(nn*(nn+1.0d0))/zk*rcx
+call prin2('rxnd = *', rxnd, 2)
+rxnd = -ima*zk*jnk(nn)*hnk(nn)*sqrt(nn*(nn+1.0d0))*rcx
+call prin2('jnk(nn) = *', jnk(nn), 2)
+call prin2('hnk(nn) = *', hnk(nn), 2)
+call prin2('rxnd = *', rxnd, 2)
 
 do i=1,npts
    call dzcross_prod3d(srcvals(10,i),curlj(1,i),vtmp1)
@@ -176,13 +195,64 @@ do i=1,npts
    errnc = errnc + abs(vtmp1(1)-vtmp2(1))**2*wts(i)
    errnc = errnc + abs(vtmp1(2)-vtmp2(2))**2*wts(i)
    errnc = errnc + abs(vtmp1(3)-vtmp2(3))**2*wts(i)
-   ! wtmp = 0
-   ! call dzdot_prod3d(srcvals(10,i),curlj(1,i),wtmp)
+   
+   wtmp = 0
+   call dzdot_prod3d(srcvals(10,i),curlj(1,i),wtmp)
+
+   rnd = rnd + (real(ynm(i))**2 + aimag(ynm(i))**2)*wts(i)
+   errnd = errnd + ((real(wtmp) - real(rxnd*ynm(i)))**2 + &
+       (aimag(wtmp) - aimag(rxnd*ynm(i)))**2)*wts(i)
 enddo
 
 errnc = sqrt(errnc/rnc)
+errnd = sqrt(errnd/rnd)
+
 call prin2('rnc=*',rnc,1)
+call prin2('rnd=*',rnd,1)
+
 call prin2('error in n times curl sk = *',errnc,1)
+call prin2('error in n dot curl s0 =*',errnd,1)
+
+! grad Sk tests
+
+! eqn. (61)
+runc = 0
+rxnc = ima*zk*jnk(nn)*hnk(nn)*sqrt(nn*(nn+1.0d0))
+
+! eqn. (29)
+rynd = ima*zk**2*jnk(nn)*hnkp(nn)
+call prin2('rynd = *', rynd, 2)
+
+errnc = 0
+errnd = 0
+rnc = 0
+rnd = 0
+
+do i=1,npts
+    vtmp1 = 0
+    vtmp2 = 0
+    call dzcross_prod3d(srcvals(10,i),gradrho(1,i),vtmp1)
+    vtmp2(1:3) = rxnc*xnm(1:3,i)
+    rnc = rnc + abs(vtmp2(1))**2*wts(i)
+    rnc = rnc + abs(vtmp2(2))**2*wts(i)
+    rnc = rnc + abs(vtmp2(3))**2*wts(i)
+    ! rnc = rnc + (vtmp2(1)**2 + vtmp2(2)**2 + vtmp2(3)**2)*wts(i)
+    errnc = errnc + aimag(vtmp1(1)-vtmp2(1))**2*wts(i)
+    errnc = errnc + aimag(vtmp1(2)-vtmp2(2))**2*wts(i)
+    errnc = errnc + aimag(vtmp1(3)-vtmp2(3))**2*wts(i)
+
+    wtmp = 0
+    call dzdot_prod3d(srcvals(10,i),gradrho(1,i),wtmp)
+    wtmp = wtmp - rho(i)/2
+    errnd = errnd + ((real(wtmp)-real(rynd*ynm(i)))**2 &
+         + (aimag(wtmp)-aimag(rynd*ynm(i)))**2)*wts(i)
+    rnd = rnd + (real(ynm(i))**2+aimag(ynm(i))**2)*wts(i)
+enddo
+
+errnc = sqrt(errnc/rnc)
+errnd = sqrt(errnd/rnd)
+call prin2('error in n times grad s0 = *',errnc,1)
+call prin2('error in n dot grad s0 =*',errnd,1)
 
 return
 end
