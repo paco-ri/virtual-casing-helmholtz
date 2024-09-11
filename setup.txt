@@ -1,0 +1,7 @@
+steps for setup:
+
+in virtual-casing(-helmholtz), 
+1. make src/magneto-static-routs.o
+2. make src/magneto-dynamic-routs.o
+3. make src/surf_routs.o
+4. make install
