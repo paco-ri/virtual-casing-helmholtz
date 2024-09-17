@@ -535,7 +535,7 @@
 !  Allocate various densities
 !
 
-      allocate(sigmaoverr(4,ns),sigmoveri(4,ns))
+      allocate(sigmaoverr(4,ns),sigmaoveri(4,ns))
       allocate(abc0r(4,npts),abc0i(4,npts))
 
 !
@@ -631,10 +631,12 @@
                curlj(1,i) = curlj(1,i) + &
                     w2*(abc0r(3,jstart+l-1) + ima*abc0i(3,jstart+l-1)) - &
                     w3*(abc0r(2,jstart+l-1) + ima*abc0i(2,jstart+l-1))
-               curlj(2,i) = curlj(2,i) + w3*abc0(1,jstart+l-1) - &
-                    w1*abc0(3,jstart+l-1)
-               curlj(3,i) = curlj(3,i) + w1*abc0(2,jstart+l-1) - &
-                    w2*abc0(1,jstart+l-1)
+               curlj(2,i) = curlj(2,i) + &
+                    w3*(abc0r(1,jstart+l-1) + ima*abc0i(1,jstart+l-1)) - &
+                    w1*(abc0r(3,jstart+l-1) + ima*abc0i(3,jstart+l-1))
+               curlj(3,i) = curlj(3,i) + &
+                    w1*(abc0r(2,jstart+l-1) + ima*abc0i(2,jstart+l-1)) - &
+                    w2*(abc0r(1,jstart+l-1) + ima*abc0i(1,jstart+l-1))
                gradrho(1,i) = gradrho(1,i) + &
                     w1*(abc0r(4,jstart+l-1) + ima*abc0i(4,jstart+l-1))
                gradrho(2,i) = gradrho(2,i) + &
@@ -971,7 +973,7 @@
      !
 
      !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,jquadstart) &
-     !$OMP PRIVATE(jstart,npols,l,w1,w2,w3)o
+     !$OMP PRIVATE(jstart,npols,l,w1,w2,w3)
            do i=1,ntarg
              gradrho(1,i) = gradrhor(1,i) + ima*gradrhoi(1,i)
              gradrho(2,i) = gradrhor(2,i) + ima*gradrhoi(2,i)

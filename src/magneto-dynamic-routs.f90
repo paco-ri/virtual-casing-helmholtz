@@ -98,6 +98,319 @@ subroutine oversample_zfun_surf(nd,npatches,norders,ixyzs,iptype,npts,&
 end subroutine oversample_zfun_surf
 
 
+subroutine lpcomp_gradcurlhelm_addsub(npatches,norders,ixyzs,&
+     iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targs, &
+     eps,zk,nnz,row_ptr,col_ind,iquad,nquad,wnear,rjvec,rho, &
+     novers,nptso,ixyzso,srcover,whtsover,curlj,gradrho)
+
+!
+!  This subroutine evaluates the sets of potentials to the following
+!  representations where j is assumed to be a tangential vector field, and rho
+!  a scalar function defined on the surface:
+!  1. curl (S_{k}[j]) 
+!  2. grad S_{k}[rho]
+!
+!  where the near field is precomputed and stored
+!  in the row sparse compressed format.
+!
+!  The identity term is not included in teh representation
+!
+!  The fmm is used to accelerate the far-field and 
+!  near-field interactions are handled via precomputed quadrature
+!
+!  Using add and subtract - no need to call tree and set fmm parameters
+!  can directly call existing fmm library
+!
+!  Input arguments:
+! 
+!    - npatches: integer
+!        number of patches
+!    - norders: integer(npatches)
+!        order of discretization on each patch 
+!    - ixyzs: integer(npatches+1)
+!        ixyzs(i) denotes the starting location in srccoefs,
+!        and srcvals array corresponding to patch i
+!    - iptype: integer(npatches)
+!        type of patch
+!        iptype = 1, triangular patch discretized using RV nodes
+!    - npts: integer
+!        total number of discretization points on the boundary
+!    - srccoefs: real *8 (9,npts)
+!        koornwinder expansion coefficients of xyz, dxyz/du,
+!        and dxyz/dv on each patch. 
+!        For each point 
+!          * srccoefs(1:3,i) is xyz info
+!          * srccoefs(4:6,i) is dxyz/du info
+!          * srccoefs(7:9,i) is dxyz/dv info
+!    - srcvals: real *8 (12,npts)
+!        xyz(u,v) and derivative info sampled at the 
+!        discretization nodes on the surface
+!          * srcvals(1:3,i) - xyz info
+!          * srcvals(4:6,i) - dxyz/du info
+!          * srcvals(7:9,i) - dxyz/dv info
+!          * srcvals(10:12,i) - normals info
+!    - ndtarg: integer
+!        leading dimension of target array
+!    - ntarg: integer
+!        number of targets
+!    - targs: double precision(ndtarg,ntarg)
+!        target info, the first three components
+!        must be xyz coordinates
+!    - eps: real *8
+!        precision requested
+!    - zk: [complex *16]
+!        wavenumber k in Helmholtz kernel
+!    - nnz: integer *8
+!        number of source patch-> target interactions in the near field
+!    - row_ptr: integer(npts+1)
+!        row_ptr(i) is the pointer
+!        to col_ind array where list of relevant source patches
+!        for target i start
+!    - col_ind: integer (nnz)
+!        list of source patches relevant for all targets, sorted
+!        by the target number
+!    - iquad: integer(nnz+1)
+!        location in wnear_ij array where quadrature for col_ind(i)
+!        starts for a single kernel. In this case the different kernels
+!        are matrix entries are located at (m-1)*nquad+iquad(i), where
+!        m is the kernel number
+!    - nquad: integer
+!        number of near field entries corresponding to each source target
+!        pair. The size of wnear is 4*nquad since there are 4 kernels
+!        per source target pair
+!    - wnear: complex *16(3*nquad)
+!        Precomputed near field quadrature
+!          * the first kernel is \nabla_{x} S_{k}
+!          * the second kernel is \nabla_{y} S_{k}
+!          * the third kernel is \nabla_{z} S_{k}
+!    - rjvec: complex *16(3,npts)
+!        The current density j
+!    - rho: complex *16(npts)
+!        The charge density rho
+!    - novers: integer(npatches)
+!        order of discretization for oversampled sources and
+!        density
+!    - ixyzso: integer(npatches+1)
+!        ixyzso(i) denotes the starting location in srcover,
+!        corresponding to patch i
+!    - nptso: integer
+!        total number of oversampled points
+!    - srcover: real *8 (12,nptso)
+!        oversampled set of source information
+!    - whtsover: real *8 (nptso)
+!        smooth quadrature weights at oversampled nodes
+!
+!  Output arguments:
+!    - curlj: real *8 (3,ntarg)
+!         returns the potential curl S_{k}[j]
+!    - gradrho: real *8 (3,ntarg)
+!         returns the potential grad S_{k}[\rho]
+!
+
+  implicit none
+  integer npatches,norder,npols,npts
+  integer ndtarg,ntarg
+  integer norders(npatches),ixyzs(npatches+1)
+  integer ixyzso(npatches+1),iptype(npatches)
+  real *8 srccoefs(9,npts),srcvals(12,npts),eps
+  complex *16 zk
+  real *8 targs(ndtarg,ntarg) 
+  integer nnz,row_ptr(ntarg+1),col_ind(nnz),nquad
+  integer iquad(nnz+1)
+  complex *16 rjvec(3,npts),rho(npts)
+  complex *16 wnear(nquad,3)
+
+  integer novers(npatches)
+  integer nover,npolso,nptso
+  real *8 srcover(12,nptso),whtsover(nptso)
+  complex *16 curlj(3,ntarg),gradrho(3,ntarg)
+  real *8, allocatable :: wts(:)
+  
+  real *8 rhom,rhop,rmum,uf,vf,wtmp
+  real *8 u1,u2,u3,u4
+  complex *16 w1,w2,w3
+  
+  real *8, allocatable :: sources(:,:),targtmp(:,:)
+  complex *16, allocatable :: charges0(:,:),sigmaover(:,:),abc0(:,:)
+  complex *16, allocatable :: pot_aux(:,:),grad_aux(:,:,:)
+  complex *16, allocatable :: dpottmp(:),dgradtmp(:,:)
+  real *8 vtmp1(3),vtmp2(3),vtmp3(3),rncj,errncj
+
+  integer ns,nt
+  integer ifcharge,ifdipole
+  integer ifpgh,ifpghtarg
+  complex *16 tmp(10),val,E(4)
+
+  integer i,j,jpatch,jquadstart,jstart,count1,count2
+  real *8 radexp,epsfmm
+
+  integer ipars(2)
+  real *8 dpars(1),timeinfo(10),t1,t2,omp_get_wtime
+
+  real *8, allocatable :: radsrc(:)
+  real *8, allocatable :: srctmp2(:,:)
+  complex *16, allocatable :: ctmp0(:,:)
+  real *8 thresh,ra,erra
+  real *8 rr,rmin
+  real *8 over4pi
+  real *8 rbl(3),rbm(3)
+  integer nss,ii,l,npover
+  complex *16 ima,ztmp
+
+  integer nd,ntarg0,nmax
+  integer ndd,ndz,ndi,ier
+
+  real *8 ttot,done,pi
+  data ima/(0.0d0,1.0d0)/
+  data over4pi/0.07957747154594767d0/
+
+  parameter (ntarg0=1)
+
+  ns = nptso
+  done = 1
+  pi = atan(done)*4
+
+  ifpgh = 0
+  ifpghtarg = 2
+  allocate(sources(3,ns),targtmp(3,ntarg))
+
+  nmax = 0
+
+  ! Estimate max number of sources in the near field of any target
+  call get_near_corr_max(ntarg,row_ptr,nnz,col_ind,npatches,ixyzso,nmax)
+
+  ! Allocate various densities
+  allocate(sigmaover(4,ns),abc0(4,npts))
+
+  ! Extract source and target info
+  !$OMP PARALLEL DO DEFAULT(SHARED)
+  do i=1,ns
+     sources(1,i) = srcover(1,i)
+     sources(2,i) = srcover(2,i)
+     sources(3,i) = srcover(3,i)
+  enddo
+  !$OMP END PARALLEL DO      
+  !$OMP PARALLEL DO DEFAULT(SHARED)
+  do i=1,ntarg
+     targtmp(1,i) = targs(1,i)
+     targtmp(2,i) = targs(2,i)
+     targtmp(3,i) = targs(3,i)
+  enddo
+  !$OMP END PARALLEL DO
+
+  nd = 4
+  allocate(charges0(nd,ns))
+
+  !$OMP PARALLEL DO DEFAULT(SHARED) 
+  do i=1,npts
+     abc0(1,i) = rjvec(1,i)
+     abc0(2,i) = rjvec(2,i)
+     abc0(3,i) = rjvec(3,i)
+     abc0(4,i) = rho(i)
+  enddo
+  !$OMP END PARALLEL DO
+
+  call oversample_zfun_surf(nd,npatches,norders,ixyzs,iptype,& 
+       npts,abc0,novers,ixyzso,ns,sigmaover)
+        
+  !$OMP PARALLEL DO DEFAULT(SHARED) 
+  do i=1,ns
+     charges0(1:4,i) = sigmaover(1:4,i)*whtsover(i)*over4pi
+  enddo
+  !$OMP END PARALLEL DO      
+
+  allocate(pot_aux(nd,ntarg),grad_aux(nd,3,ntarg))
+
+  ! print *, "before fmm"
+  call hfmm3d_t_c_g_vec(nd,eps,zk,ns,sources,charges0,ntarg,&
+       targtmp,pot_aux,grad_aux,ier)
+
+  !$OMP PARALLEL DO DEFAULT(SHARED)         
+  do i=1,ntarg
+     curlj(1,i) = grad_aux(3,2,i) - grad_aux(2,3,i)
+     curlj(2,i) = grad_aux(1,3,i) - grad_aux(3,1,i)
+     curlj(3,i) = grad_aux(2,1,i) - grad_aux(1,2,i)
+     gradrho(1:3,i) = grad_aux(4,1:3,i)
+  enddo
+  !$OMP END PARALLEL DO
+
+  ! print *, "after fmm"
+  
+  ! Add near quadrature correction
+
+  !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,jquadstart) &
+  !$OMP PRIVATE(jstart,npols,l,w1,w2,w3)
+  do i=1,ntarg
+     do j=row_ptr(i),row_ptr(i+1)-1
+        jpatch = col_ind(j)
+        npols = ixyzs(jpatch+1)-ixyzs(jpatch)
+        jquadstart = iquad(j)
+        jstart = ixyzs(jpatch) 
+        do l=1,npols
+           w1 = wnear(jquadstart+l-1,1)
+           w2 = wnear(jquadstart+l-1,2)
+           w3 = wnear(jquadstart+l-1,3)
+           curlj(1,i) = curlj(1,i) + &
+                w2*abc0(3,jstart+l-1) - w3*abc0(2,jstart+l-1)
+           curlj(2,i) = curlj(2,i) + &
+                w3*abc0(1,jstart+l-1) - w1*abc0(3,jstart+l-1)
+           curlj(3,i) = curlj(3,i) + &
+                w1*abc0(2,jstart+l-1) - w2*abc0(1,jstart+l-1)
+           gradrho(1,i) = gradrho(1,i) + w1*abc0(4,jstart+l-1)
+           gradrho(2,i) = gradrho(2,i) + w2*abc0(4,jstart+l-1)
+           gradrho(3,i) = gradrho(3,i) + w3*abc0(4,jstart+l-1)
+        enddo
+     enddo
+  enddo
+  !$OMP END PARALLEL DO
+      
+  ! print *, "after Laplace near correction"
+  ! print *, "nmax=",nmax
+  ! print *, "nd=",nd
+
+  call get_fmm_thresh(12,ns,srcover,12,npts,srcvals,thresh)
+
+  ! print *, "Thresh=",thresh
+
+  ! Subtract near contributions computed via fmm
+  allocate(dpottmp(nd),dgradtmp(nd,3))
+  allocate(ctmp0(nd,nmax))
+  allocate(srctmp2(3,nmax))
+  !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,srctmp2) &
+  !$OMP PRIVATE(ctmp0,l,jstart,nss,dpottmp,dgradtmp)
+  do i=1,ntarg
+     nss = 0
+     do j=row_ptr(i),row_ptr(i+1)-1
+        jpatch = col_ind(j)
+        do l=ixyzso(jpatch),ixyzso(jpatch+1)-1
+           nss = nss+1
+           srctmp2(1,nss) = srcover(1,l)
+           srctmp2(2,nss) = srcover(2,l)
+           srctmp2(3,nss) = srcover(3,l)
+           ctmp0(1:4,nss) = charges0(1:4,l)
+        enddo
+     enddo
+
+     dpottmp = 0
+     dgradtmp = 0
+
+     call h3ddirectcg(nd,zk,srctmp2,ctmp0,nss,targtmp(1,i), &
+          ntarg0,dpottmp,dgradtmp,thresh)
+     curlj(1,i) = curlj(1,i) - (dgradtmp(3,2)-dgradtmp(2,3))
+     curlj(2,i) = curlj(2,i) - (dgradtmp(1,3)-dgradtmp(3,1))
+     curlj(3,i) = curlj(3,i) - (dgradtmp(2,1)-dgradtmp(1,2))
+     gradrho(1,i) = gradrho(1,i) - dgradtmp(4,1)
+     gradrho(2,i) = gradrho(2,i) - dgradtmp(4,2)
+     gradrho(3,i) = gradrho(3,i) - dgradtmp(4,3)
+  enddo
+  !$OMP END PARALLEL DO      
+
+  ! print *, "finished pot eval"
+
+  return
+end subroutine lpcomp_gradcurlhelm_addsub
+
+
 subroutine lpcomp_gradhelm(npatches,norders,ixyzs,iptype,npts,srccoefs,&
      srcvals,ndtarg,ntarg,targs,ipatch_id,uvs_targ,eps,zk,rho,gradrho)
   !
@@ -315,16 +628,8 @@ subroutine lpcomp_gradhelm_addsub(npatches,norders,ixyzs,iptype,npts,&
   !$OMP END PARALLEL DO
   
   allocate(pot_aux(ntarg))
-  !call prin2('eps = *', eps, 1)
-  !call prin2('zk = *', zk, 2)
-  !call prinf('ns = *' ,ns, 1)
-  !call prin2('sources = *', sources, 10)
-  !call prin2('charges0 *', charges0, 10)
-  !call prinf('ntarg = *', ntarg, 1)
-  !call prin2('targtmp = *', targtmp, 10)
-  !stop
   call hfmm3d_t_c_g(eps,zk,ns,sources,charges0,ntarg,targtmp,&
-      pot_aux,gradrho,ier)
+       pot_aux,gradrho,ier)
   
   ! Add near quadrature correction
   !$OMP PARALLEL DO DEFAULT(SHARED) PRIVATE(i,j,jpatch,jquadstart) &
@@ -345,7 +650,7 @@ subroutine lpcomp_gradhelm_addsub(npatches,norders,ixyzs,iptype,npts,&
         enddo
      enddo
   enddo
-  !$OMP END PARALLEL DO     
+  !$OMP END PARALLEL DO
 
   call get_fmm_thresh(12,ns,srcover,12,npts,srcvals,thresh)
 
