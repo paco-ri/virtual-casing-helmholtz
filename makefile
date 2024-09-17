@@ -73,7 +73,8 @@ FFLAGS += -J .mod/
 	$(FC) -c $(FFLAGS) $< -o $@
 
 FMM_INSTALL = ${HOME}/lib/libfmm3d.a
-FMMBIE_INSTALL = ${HOME}/lib/libfmm3dbie.a
+# FMMBIE_INSTALL = ${HOME}/lib/libfmm3dbie.a
+FMMBIE_INSTALL = ${HOME}/fmm3dbie/lib-static/libfmm3dbie_matlab.a
 
 install:
 	cd lib && rm -rf *

@@ -55,9 +55,9 @@ pi = atan(done)*4
 
 ! set up geometry
 igeomtype = 1
-ipars(1) = 2
+ipars(1) = 3!2
 npatches = 12*(4**ipars(1)) 
-norder = 6!7 
+norder = 7
 npols = (norder+1)*(norder+2)/2
 npts = npatches*npols
 allocate(srcvals(12,npts),srccoefs(9,npts))
