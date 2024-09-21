@@ -1,0 +1,25 @@
+  implicit none
+
+  integer i
+  
+  integer npatches
+  integer norders(npatches)
+  integer ixyzs(npatches+1), iptype(npatches), npts
+  real *8 srccoefs(9,npts), srcvals(12,npts)
+  integer ndtarg, ntarg
+  real *8 targs(ndtarg,ntarg), eps_gc, dcomplex[1] zk, int[1] nnz, int[ntargp1] row_ptr, int[nnz] col_ind, int[nnzp1] iquad, int[1] nquad, dcomplex[nquad,3] wnear, dcomplex[3,npts] rjvec, dcomplex[npts] rho, int[npatches] novers, int[1] nptso, int[npatp1] ixyzso, double[12,nptso] srcover, double[nptso] wover, inout dcomplex[3,ntarg] curlj, inout dcomplex[3,ntarg] gradrho,int[1] npatches,int[npatches] norders, int[npatp1] ixyzs,int[npatches] iptype, int[1] npts,double[n9,npts] srccoefs,double[n12,npts] srcvals,int[1] ndtarg, int[1] ntarg, double[ndtarg,ntarg] targs, double[1] eps_helm,int[1] ndd, double[ndd] dpars, int[1] ndz, dcomplex[ndz] zpars, int[1] ndi, int[ndi] ipars, int[1] nnzhelm, int[ntargp1] row_ptr_helm, int[nnzhelm] col_ind_helm, int[nnzhelmp1] iquadhelm, int[1] nquadhelm,int[1] nker,dcomplex[nquadhelm] wnearhelm,  int[npatches] novershelm, int[1] nptsohelm, int[npatp1] ixyzsohelm,double[12,nptsohelm] srcoverhelm, double[nptsohelm] woverhelm, int[1] lwork, double[lwork] work, int[1] idensflag, int[1] ndim, dcomplex[ndim,npts] sigma, int[1] ipotflag, int[1] ndim_p, inout dcomplex[ndim,ntarg] p
+
+  npatches = 75
+  do i = 1,npatches
+     norders(i) = 4
+  end do
+  do i = 1,npatches+1
+     ixyzs(i) = 1 + 25*i
+  end do
+  do i = 1,npatches
+     iptype(i) = 11
+  end do
+  npts = 1875
+  
+
+  

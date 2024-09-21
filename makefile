@@ -90,3 +90,7 @@ test_gradcurlhelm:
 	gfortran -o test/test_gradcurlhelm test/test_gradcurlhelm.f90 lib-static/libvirtualcasing.a -fallow-argument-mismatch -fPIC -O3 -march=native -funroll-loops -std=legacy -w -fopenmp -lm -lstdc++ -lgomp -lblas -llapack
 	test/test_gradcurlhelm
 
+test_mtxbsigma:
+	gfortran -o test/test_mtxbsigma test/test_mtxbsigma.f90 lib-static/libvirtualcasing.a -fallow-argument-mismatch -fPIC -O3 -march=native -funroll-loops -std=legacy -w -fopenmp -lm -lstdc++ -lgomp -lblas -llapack
+	test/test_mtxbsigma
+

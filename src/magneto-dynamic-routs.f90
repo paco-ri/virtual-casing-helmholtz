@@ -97,6 +97,99 @@ subroutine oversample_zfun_surf(nd,npatches,norders,ixyzs,iptype,npts,&
   return
 end subroutine oversample_zfun_surf
 
+subroutine lpcomp_gradcurlhelm(npatches,norders,ixyzs,iptype,npts,srccoefs,&
+     srcvals,ndtarg,ntarg,targs,ipatch_id,uvs_targ,eps,zk,rjvec,rho,&
+     curlj,gradrho)
+  !
+  ! Computes grad S_k[rho]
+  !
+  ! Additional/changed input arguments:
+  !
+  !   zk [complex *16]: wavenumber k in Helmholtz kernel
+  !   rho [complex *16 (npts)]: COMPLEX charge density
+  ! 
+  ! Changed output argument:
+  !
+  !   gradrho [complex *16 (3,ntarg)]: COMPLEX grad S_k[rho]
+  ! 
+
+  implicit none
+  integer, intent(in) :: npatches,norders(npatches)
+  integer, intent(in) :: iptype(npatches),ixyzs(npatches+1)
+  integer, intent(in) :: npts,ndtarg,ntarg
+  real *8, intent(in) :: srcvals(12,npts),srccoefs(9,npts)
+  real *8, intent(in) :: targs(ndtarg)
+  integer, intent(in) :: ipatch_id(ntarg)
+  real *8, intent(in) :: uvs_targ(2,ntarg)
+  real *8, intent(in) :: eps
+  complex *16, intent(in) :: zk
+  complex *16, intent(in) :: rho(npts),rjvec(3,npts)
+  complex *16, intent(out) :: gradrho(3,ntarg),curlj(3,ntarg)
+
+  integer nptso,nnz,nquad
+  integer nover,npolso,npols,norder
+  integer, allocatable :: row_ptr(:),col_ind(:),iquad(:)
+  complex *16, allocatable :: wnear(:,:)
+
+  real *8, allocatable :: srcover(:,:),wover(:)
+  integer, allocatable :: ixyzso(:),novers(:)
+  real *8, allocatable :: cms(:,:),rads(:),rad_near(:)
+  integer iptype_avg,norder_avg,iquadtype,npts_over,ikerorder
+  integer i
+  real *8 rfac,rfac0
+
+  iptype_avg = floor(sum(iptype)/(npatches+0.0d0))
+  norder_avg = floor(sum(norders)/(npatches+0.0d0))
+
+  call get_rfacs(norder_avg,iptype_avg,rfac,rfac0)
+  ! Get centroid and bounding sphere info
+  allocate(cms(3,npatches),rads(npatches),rad_near(npatches))
+  call get_centroid_rads(npatches,norders,ixyzs,iptype,npts, &
+          srccoefs,cms,rads)
+
+  !$OMP PARALLEL DO DEFAULT(SHARED)
+  do i=1,npatches
+     rad_near(i) = rads(i)*rfac
+  enddo
+  !$OMP END PARALLEL DO
+
+  ! Find near quadrature corrections
+  call findnearmem(cms,npatches,rad_near,ndtarg,targs,ntarg,nnz)
+  allocate(row_ptr(ntarg+1),col_ind(nnz))
+  call findnear(cms,npatches,rad_near,ndtarg,targs,ntarg,row_ptr,col_ind)
+  allocate(iquad(nnz+1)) 
+  call get_iquad_rsc(npatches,ixyzs,ntarg,nnz,row_ptr,col_ind,iquad)
+
+  ! Estimate oversampling required for far-field, and oversample geometry
+  ikerorder = 0
+  allocate(novers(npatches),ixyzso(npatches+1))
+  call get_far_order(eps,npatches,norders,ixyzs,iptype,cms, &
+       rads,npts,srccoefs,ndtarg,ntarg,targs,ikerorder,zk, &
+       nnz,row_ptr,col_ind,rfac,novers,ixyzso)
+  npts_over = ixyzso(npatches+1)-1
+  allocate(srcover(12,npts_over),wover(npts_over))
+  call oversample_geom(npatches,norders,ixyzs,iptype,npts, &
+       srccoefs,srcvals,novers,ixyzso,npts_over,srcover)
+  call get_qwts(npatches,novers,ixyzso,iptype,npts_over, &
+       srcover,wover)
+
+  ! Compute near quadrature corrections
+  nquad = iquad(nnz+1)-1
+  allocate(wnear(nquad,3))
+  wnear = 0
+  iquadtype = 1
+  call getnearquad_magnetodynamics(npatches,norders,ixyzs, &
+       iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targs,ipatch_id, &
+       uvs_targ,eps,zk,iquadtype,nnz,row_ptr,col_ind,iquad,rfac0, &
+       nquad,wnear)
+
+  ! Compute layer potential
+  call lpcomp_gradcurlhelm_addsub(npatches,norders,ixyzs,iptype,npts,&
+       srccoefs,srcvals,ndtarg,ntarg,targs,eps,zk,nnz,row_ptr,col_ind,&
+       iquad,nquad,wnear,rjvec,rho,novers,npts_over,ixyzso,srcover,&
+       wover,curlj,gradrho)
+  return
+end subroutine lpcomp_gradcurlhelm
 
 subroutine lpcomp_gradcurlhelm_addsub(npatches,norders,ixyzs,&
      iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targs, &
