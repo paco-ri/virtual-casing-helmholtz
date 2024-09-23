@@ -28,8 +28,7 @@ subroutine helm_comb_dir_eval_addsub_vec(npatches, norders, ixyzs, &
   complex *16 pot(ndim,ntarg)
 
   integer i
-
-  !$OMP PARALLEL DO DEFAULT(SHARED)
+  
   do i = 1,ndim
      call helm_comb_dir_eval_addsub(npatches, norders, ixyzs, &
      iptype, npts, srccoefs, srcvals, ndtarg, ntarg, targs, eps, ndd, &
@@ -37,7 +36,6 @@ subroutine helm_comb_dir_eval_addsub_vec(npatches, norders, ixyzs, &
      nquad, nker, wnear, novers, nptso, ixyzso, srcover, whtsover, &
      lwork, work, idensflag, 1, sigma(i,:), ipotflag, ndim_p, pot(i,:))
   enddo
-  !$OMP END PARALLEL DO
 
   return
 end subroutine helm_comb_dir_eval_addsub_vec
