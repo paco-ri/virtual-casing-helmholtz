@@ -29,6 +29,7 @@ subroutine helm_comb_dir_eval_addsub_vec(npatches, norders, ixyzs, &
 
   integer i
 
+  !$OMP PARALLEL DO DEFAULT(SHARED)
   do i = 1,ndim
      call helm_comb_dir_eval_addsub(npatches, norders, ixyzs, &
      iptype, npts, srccoefs, srcvals, ndtarg, ntarg, targs, eps, ndd, &
@@ -36,26 +37,11 @@ subroutine helm_comb_dir_eval_addsub_vec(npatches, norders, ixyzs, &
      nquad, nker, wnear, novers, nptso, ixyzso, srcover, whtsover, &
      lwork, work, idensflag, 1, sigma(i,:), ipotflag, ndim_p, pot(i,:))
   enddo
+  !$OMP END PARALLEL DO
 
   return
 end subroutine helm_comb_dir_eval_addsub_vec
 
-! subroutine mtxbsigma_eval_addsub(npatches,norders,ixyzs, &
-!      iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targs, &
-!      eps,ndd,dpars,ndz,zpars,ndi,ipars,nnz_gc,nnz_helm, &
-!      row_ptr_gc,row_ptr_helm,col_ind_gc,col_ind_helm, &
-!      iquad_gc,iquad_helm,nquad_gc,nquad_helm,nker,&
-!      wnear_gc,wnear_helm,novers_gc,novers_helm,nptso_gc,&
-!      nptso_helm,ixyzso_gc,ixyzso_helm,srcover_gc, &
-!      srcover_helm,whtsover_gc,whtsover_helm,lwork, &
-!      work,idensflag,ndim,sigma,ipotflag,ndim_p,rjvec,rho, &
-!      pot,curlj,gradrho)
-! 
-! subroutine mtxbsigma_eval_addsub(npatches,norders,ixyzs,&
-!      iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targs, &
-!      eps,ndz,zpars,nnz_gc,row_ptr_gc,col_ind_gc,iquad_gc, &
-!      nquad_gc,wnear_gc,rjvec,rho,novers_gc,nptso_gc, &
-!      ixyzso_gc,srcover_gc,whtsover_gc,curlj,gradrho)
 subroutine mtxbsigma_eval_addsub(npatches,norders,ixyzs, &
      iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targs, &
      eps,zpars,nnz_gc,row_ptr_gc, &
@@ -67,9 +53,6 @@ subroutine mtxbsigma_eval_addsub(npatches,norders,ixyzs, &
      ndim,sigma,rjvec,rho,pot,curlgrad)
   
   implicit none
-  ! 
-  ! ,curlj,gradrho
-
   integer npatches,npts,nnz_gc,ndtarg
   integer norders(npatches),ixyzs(npatches+1)
   integer iptype(npatches)
@@ -111,10 +94,12 @@ subroutine mtxbsigma_eval_addsub(npatches,norders,ixyzs, &
      eps(1),zpars(1),nnz_gc,row_ptr_gc,col_ind_gc,iquad_gc,&
      nquad_gc,wnear_gc,rjvec,rho,novers_gc,nptso_gc,ixyzso_gc,&
      srcover_gc,whtsover_gc,curlj,gradrho)
+  !$OMP PARALLEL DO DEFAULT(SHARED)
   do i = 1,npts
      curlgrad(1:3,i) = curlj(1:3,i)
      curlgrad(4:6,i) = gradrho(1:3,i)
   enddo
+  !$OMP END PARALLEL DO
   call helm_comb_dir_eval_addsub_vec(npatches,norders,ixyzs, &
      iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targs,eps(2),0, &
      dpars,3,zpars,0,ipars,nnz_helm,row_ptr_helm,col_ind_helm, &
