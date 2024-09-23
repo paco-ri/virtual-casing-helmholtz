@@ -79,20 +79,30 @@ subroutine mtxbsigma_eval_addsub(npatches,norders,ixyzs, &
   real *8 srcover_helm(12,nptso_helm),whtsover_helm(nptso_helm)
   complex *16 curlj(3,ntarg),gradrho(3,ntarg)
   
-  call lpcomp_gradcurlhelm_addsub(npatches,norders,ixyzs,&
-     iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targs, &
-     eps(1),zpars(1),nnz_gc,row_ptr_gc,col_ind_gc,iquad_gc,&
-     nquad_gc,wnear_gc,rjvec,rho,novers_gc,nptso_gc,ixyzso_gc,&
-     srcover_gc,whtsover_gc,curlj,gradrho)
-
-  call helm_comb_dir_eval_addsub_vec(npatches, norders, ixyzs, &
-     iptype, npts, srccoefs, srcvals, ndtarg, ntarg, targs, eps(2), ndd, &
-     dpars, ndz, zpars, ndi, ipars, nnz_helm, row_ptr_helm, col_ind_helm, iquad_helm, &
-     nquad_helm, nker, wnear_helm, novers_helm, nptso_helm, ixyzso_helm, srcover_helm, whtsover_helm, &
-     lwork, work, idensflag, ndim, sigma, ipotflag, ndim_p, pot)
-
+!   call lpcomp_gradcurlhelm_addsub(npatches,norders,ixyzs,&
+!      iptype,npts,srccoefs,srcvals,ndtarg,ntarg,targs, &
+!      eps(1),zpars(1),nnz_gc,row_ptr_gc,col_ind_gc,iquad_gc,&
+!      nquad_gc,wnear_gc,rjvec,rho,novers_gc,nptso_gc,ixyzso_gc,&
+!      srcover_gc,whtsover_gc,curlj,gradrho)
+! 
+!   call helm_comb_dir_eval_addsub_vec(npatches, norders, ixyzs, &
+!      iptype, npts, srccoefs, srcvals, ndtarg, ntarg, targs, eps(2), ndd, &
+!      dpars, ndz, zpars, ndi, ipars, nnz_helm, row_ptr_helm, col_ind_helm, iquad_helm, &
+!      nquad_helm, nker, wnear_helm, novers_helm, nptso_helm, ixyzso_helm, srcover_helm, whtsover_helm, &
+!      lwork, work, idensflag, ndim, sigma, ipotflag, ndim_p, pot)
+! 
   return
 end subroutine mtxbsigma_eval_addsub
+
+subroutine testfun(npts, ndim, ntarg, sigma, pot)
+  implicit none
+  integer npts, ndim, ntarg
+  complex *16 sigma(ndim,npts), pot(3,ntarg)
+
+  pot = 0
+
+  return 
+end subroutine testfun
 
 ! subroutine mtxbsigma_eval_addsub(npatches, norders, ixyzs, &
 !      iptype, npts, srccoefs, srcvals, ndtarg, ntarg, targs, eps, ndd, &
