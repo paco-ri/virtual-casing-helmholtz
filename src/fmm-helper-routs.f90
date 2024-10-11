@@ -1,3 +1,55 @@
+subroutine lap_comb_dir_eval_addsub_vec(npatches, norders, ixyzs, &
+     iptype, npts, srccoefs, srcvals, ndtarg, ntarg, targs, eps, ndd, &
+     dpars, ndz, zpars, ndi, ipars, nnz, row_ptr, col_ind, iquad, &
+     nquad, nker, wnear, novers, nptso, ixyzso, srcover, whtsover, &
+     lwork, work, idensflag, ndim, sigma, ipotflag, ndim_p, pot)
+
+  ! Vectorized and complex sigma version of lpcomp_helm_comb_dir_addsub
+  !
+  ! Changed input arguments:
+  !   ndim: integer
+  !     number of densities for which to evaluate layer potential
+  !   sigma: complex *16 (ndim,npts)
+  !
+  ! Changed output argument:
+  !   pot: complex *16 (ndim,npts)
+
+  implicit none
+  integer npatches,npts,ndd,ndz,ndi,nnz,ndtarg
+  integer norders(npatches),ixyzs(npatches+1),iptype(npatches),ipars(ndi)
+  real *8 srccoefs(9,npts),srcvals(12,npts),eps,dpars(ndd)
+  complex *16 zpars(ndz)
+  integer ntarg,nquad,nker,nptso,lwork,ndim
+  integer row_ptr(ntarg+1),col_ind(nnz),iquad(nnz+1),novers(npatches+1)
+  complex *16 wnear(nquad),sigma(ndim,npts)
+  integer ixyzso(npatches+1)
+  real *8 targs(ndtarg,ntarg),srcover(12,nptso),whtsover(nptso),work(lwork)
+  integer idensflag, ipotflag, ndim_p
+  complex *16 pot(ndim,ntarg)
+
+  real *8 potr(ndim,ntarg),poti(ndim,ntarg)
+
+  integer i
+  
+  do i = 1,ndim
+     call lap_comb_dir_eval_addsub(npatches, norders, ixyzs, &
+     iptype, npts, srccoefs, srcvals, ndtarg, ntarg, targs, eps, ndd, &
+     dpars, ndz, zpars, ndi, ipars, nnz, row_ptr, col_ind, iquad, &
+     nquad, nker, wnear, novers, nptso, ixyzso, srcover, whtsover, &
+     lwork, work, idensflag, 1, real(sigma(i,:)), ipotflag, ndim_p, potr(i,:))
+     call lap_comb_dir_eval_addsub(npatches, norders, ixyzs, &
+     iptype, npts, srccoefs, srcvals, ndtarg, ntarg, targs, eps, ndd, &
+     dpars, ndz, zpars, ndi, ipars, nnz, row_ptr, col_ind, iquad, &
+     nquad, nker, wnear, novers, nptso, ixyzso, srcover, whtsover, &
+     lwork, work, idensflag, 1, aimag(sigma(i,:)), ipotflag, ndim_p, poti(i,:))
+  enddo
+
+  pot = dcmplx(potr,poti)
+
+  return
+end subroutine lap_comb_dir_eval_addsub_vec
+
+
 subroutine helm_comb_dir_eval_addsub_vec(npatches, norders, ixyzs, &
      iptype, npts, srccoefs, srcvals, ndtarg, ntarg, targs, eps, ndd, &
      dpars, ndz, zpars, ndi, ipars, nnz, row_ptr, col_ind, iquad, &
